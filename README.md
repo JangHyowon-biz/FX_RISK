@@ -1,164 +1,190 @@
-# USD/KRW FX Risk — Regime Detection & Corporate Hedging Signal
+# FX Risk Regime Analysis
 
-원/달러 환율 리스크를 가격 예측이 아니라 상태 인식(state detection) 문제로 재정의한 분석이다.
-환율 수준은 예측하기 어렵지만, 지금 변동성이 어떤 상태에 있는지는 통계적으로 탐지할 수 있다.
-이 전제 위에서 Hidden Markov Model로 시장을 세 레짐으로 나누고, 각 상태를 기업의 헤지 의사결정
-신호로 연결한다.
+Regime-based FX risk monitoring and hedging framework using USD/KRW exchange rate data.
 
----
+## Overview
 
-## 서론 — 왜 예측이 아니라 상태인가
+This project analyzes USD/KRW exchange rate risk through volatility modeling, regime detection, and risk quantification.
 
-기업이 달러 자산을 보유하는 순간 환율 리스크는 피할 수 없다. 그러나 효율적 시장 가설 아래에서
-내일의 환율을 맞히는 일은 사실상 불가능에 가깝다. 그래서 실무자가 매일 마주하는 질문은
-"환율이 얼마가 될까"가 아니라 "지금 헤지 비중을 어떻게 둘까"이다.
+Rather than attempting to predict future exchange rates directly, the framework focuses on identifying hidden market regimes and translating them into practical risk management decisions.
 
-이 분석은 후자에 답하기 위해 환율 리스크를 예측의 문제에서 상태 인식의 문제로 옮긴다.
-분석 대상은 2000년 1월부터 현재까지의 USD/KRW 일별 데이터이며, 환율 리스크의 통계적 특성을
-기업이 즉시 쓸 수 있는 수치로 환산하는 것을 목표로 한다.
+The project combines Hidden Markov Models (HMM), Value-at-Risk (VaR), volatility persistence analysis, and macro-financial signals to evaluate FX exposure under different market conditions.
+
+Results below are computed on USD/KRW daily data from 2000-01-01 to 2026-05-12 (5,761 trading days), cached locally for reproducibility.
 
 ---
 
-## 1. 데이터가 말하는 두 가지 사실
+## Research Question
 
-**분포의 비정상성.** 환율 수익률은 정규분포 가정이 기각된다(Jarque-Bera p ≈ 0). 분포의 꼬리가
-정규분포보다 훨씬 두껍다 — 극단적 변동의 발생 확률이 가정보다 잦다는 뜻이다. 흔히 리스크
-지표로 쓰는 분산은 이 극단 손실을 구조적으로 과소평가한다.
+How can firms manage USD/KRW exchange rate risk when accurate exchange rate forecasting is inherently difficult?
 
-**변동성 군집(clustering).** 30일 단위 일별 변동성을 보면, 한 번 치솟은 위험은 쉽게 가라앉지
-않는다. 변동성 자기상관(ACF)은 약 6개월(lag 150일)까지 신뢰구간 밖에 머문다. 위기는 단발
-이벤트가 아니라 지속되는 상태다.
-
-이 두 사실이 "예측"이 아니라 "상태 탐지"로 가는 이론적 근거다. 리스크가 군집을 이루며 지속된다면,
-중요한 것은 다음 가격이 아니라 지금 시장이 어떤 상태에 있는가다.
+This study approaches the problem from a state-detection perspective rather than a forecasting perspective.
 
 ---
 
-## 2. 상태를 읽는 글로벌 신호
+## Methodology
 
-상태 진입을 미리 감지하기 위해 글로벌 공포지수(VIX), 달러지수(DXY), 위안화(USDCNY)를 추적했다.
+### 1. Market Structure Analysis
 
-**VIX는 선행이 아니라 공행한다.** VIX와 KRW 변동성의 리드-래그 상관은 ±5일 구간에서 0.52 부근으로
-거의 평평하고, +5일에서 0.536으로 미세하게 최고점을 찍는다. 특정 시점에 앞서기보다 공통의 글로벌
-위험 요인에 동시 반응한다는 뜻이다. 따라서 VIX는 예측 지표가 아니라 실시간 모니터링 지표이며,
-5일 선행 창은 얇다.
+* USD/KRW trend analysis
+* Rolling annualized volatility
+* Volatility persistence (ACF)
 
-**위안화는 프록시 경로를 보인다.** 단순 상관(−0.034)은 낮지만, 아시아 리스크가 터지면 외국인은
-현금화가 쉬운 원화를 대신 팔아치운다. 위안화는 단순 선형 상관으로 잡히지 않는 비선형 전이 위험을
-감시하는 보조 지표로 쓸 수 있다.
+### 2. Risk Quantification
 
----
+* Historical Value-at-Risk (VaR)
+* Return distribution analysis
+* Jarque-Bera normality test
 
-## 3. 세 개의 레짐
+### 3. Regime Detection
 
-시장을 세 상태로 분화했다. 셋의 성격은 분명히 다르다.
+A Hidden Markov Model (HMM) is used to classify the FX market into three hidden states:
 
-| Regime | 발생 비중 | 평균 변동성 | 자기지속 P(ii) | 일별 95% VaR | 수익률 왜도 |
-|------------|:-------:|:--------:|:-----------:|:----------:|:--------:|
-| Stable     | 28.6%  | 0.0052   | 47.1%       | −1.14%     | +0.84    |
-| Transition | 38.4%  | 0.0053   | 26.0%       | —          | −0.74    |
-| Crisis     | 33.0%  | 0.0121   | 98.2%       | −2.19%     | +0.13    |
+* Stable
+* Transition
+* Crisis
 
-- **Stable과 Transition은 변동성으로 갈리지 않는다.** 두 상태의 변동성은 사실상 동률(0.0052 vs 0.0053).
-  진짜 구분축은 방향성이다. Stable은 원화 강세 드리프트에 우편향(+0.84, 약세 꼬리), Transition은
-  약세 드리프트에 좌편향(−0.74, 강세 꼬리). 변동성이 아니라 방향이 다르다.
-- **Crisis는 끈끈하다.** P(Crisis→Crisis) = 98.2%. 한 번 진입하면 좀처럼 빠져나오지 못하고,
-  기대 지속 일수로 환산하면 56일이 넘는다. 위기는 지속 상태로 다뤄야 한다.
+### 4. Transition Analysis
 
-상태 번호는 학습 순서에 따라 임의 배정되므로 두 단계로 라벨을 고정한다. Crisis는 변동성이
-압도적이라 크기만으로 분리되고, Stable과 Transition은 변동성이 동률이라 자기지속 확률로 가른다
-(끈끈한 쪽이 Stable). 시드를 고정하지 않으면 라벨이 매 실행 뒤바뀌므로 `random_state`를 고정했다.
+* Theoretical transition matrix
+* Empirical transition matrix
+* Regime persistence analysis
 
----
+### 5. Regime-Specific Risk Measurement
 
-## 4. 상태에 따라 손실이 달라진다
+* Conditional VaR by regime
+* Crisis loss estimation
+* Detection delay analysis
 
-통계 수치를 기업 노출액으로 환산한 시나리오를 만들었다. $100M 포지션(환율 1,450원 가정)에서
-일별 95% 예상 손실은 Stable에서 16.5억 원, Crisis에서 31.8억 원으로 약 1.9배 차이가 난다.
-전체 표본을 하나로 묶은 단일 VaR(−1.16%)은 이 차이를 가린다.
+### 6. Global Signal Analysis
 
-같은 노출이라도 시장이 어떤 상태에 있느냐에 따라 가용 자원과 대응 강도를 완전히 달리해야 한다는
-것을 보여준다.
+Lead-lag relationships between USD/KRW and:
 
----
+* VIX
+* DXY
+* USD/CNY
 
-## 5. 헤지 의사결정 프레임워크
+### 7. Hedging Framework
 
-프레임워크의 목적은 시장 상태에 따라 헤지 비율을 동적으로 조정하는 것이다. 고정된 단일 값으로
-비중을 결정하지 않고, 요소를 순차로 반영하는 가법(加法) 구조로 최종 헤지 비율을 산출한다.
+Development of a regime-aware, rule-based hedging framework:
 
-```
-Final HR = clip( base(regime) + Δ노출 + Δ규모 + Δ왜도, 0, 1 )
-```
-
-`base`는 레짐별 정책 기초값(Stable 30% / Transition 60% / Crisis 90%)이고, 여기에 기업 유형·규모·
-레짐 왜도에 따른 조정을 더한다. Stable 수입기업 조정을 −5%p로 둔 것은(대칭이면 −10%p) Stable의
-양의 왜도, 즉 잔잔한 국면에도 원화 약세 꼬리가 있다는 점을 반영한 것이다.
-
-**헤지 예산.** 예산 승인권자 관점에서 "얼마까지 헤지 비용을 집행하는 것이 타당한가"의 기준을
-시장 상태의 자기지속성과 일일 손실 규모로 정량화한다.
-
-```
-일일 예산     = λ × VaR_t
-기대 지속     = 1 / (1 - P(ii))
-누적 기대비용 = 일일 예산 × 기대 지속
-```
-
-Crisis는 자기지속이 높아 기대 지속이 길고, 누적 비용이 폭증한다. 사후 대응보다 선제 헤지가
-구조적으로 유리하다는 근거다.
-
-**레이어드 아키텍처.** 도구를 단순 나열하는 대신, 기업의 인프라와 역량에 맞춰 단계적으로 도입할 수
-있도록 설계한다. 사전 약정 선물환을 기본으로 두고, 결제 유연성이 있는 기업은 리딩·래깅을, 옵션
-운용 역량이 있는 기업은 꼬리 위험 차단을 추가한다.
+* Hedge ratio adjustment by regime
+* Firm-type adjustment rules
+* Hedge budget allocation framework
 
 ---
 
-## 6. 한계
+## Key Findings
 
-분석의 한계는 분석만큼 중요하다.
+### Regime Characteristics
 
-- **연환산 VaR는 i.i.d. 근사다.** 일별 VaR × √252는 정규·독립 가정에 기댄 값이라, fat tail 환경에서
-  극단 손실을 과소추정한다.
-- **VIX 리드-래그는 수준-수준 상관이다.** 두 시계열 모두 강한 자기상관을 가져 공통 추세가 상관을
-  부풀린다. 평평한 프로파일을 "선행"이 아니라 "공행"으로 보수적으로 해석한 이유다.
-- **상태 탐지에는 시차가 있다.** 가격은 충격에 즉각 반응하지만 변동성 상태가 확정되기까지는 시차가
-  존재한다. 급성 충격에는 짧지만 점진적 충격에는 길어, 선제 헤지가 사전 약정 없이는 사후 대응으로
-  전락할 수 있다.
-- **HMM은 과거 분포에 기댄다.** 레짐 구조 자체가 바뀌는 구조적 단절에는 취약하다.
+| Regime     | Share | Mean Volatility | Self-persistence P(ii) | Daily 95% VaR | Skewness |
+| ---------- | :---: | :-------------: | :--------------------: | :-----------: | :------: |
+| Stable     | 28.6% | 0.0052          | 47.1%                  | −1.14%        | +0.84    |
+| Transition | 38.4% | 0.0053          | 26.0%                  | —             | −0.74    |
+| Crisis     | 33.0% | 0.0121          | 98.2%                  | −2.19%        | +0.13    |
+
+Stable and Transition share nearly identical volatility (0.0052 vs 0.0053); they are separated by direction, not magnitude. Stable drifts toward KRW strength with a right-tail (skew +0.84), while Transition drifts toward KRW weakness with a left-tail (skew −0.74).
+
+### Risk Concentration
+
+* Crisis-state 95% VaR (−2.19%) was roughly 1.9× the Stable-state VaR (−1.14%).
+* A single whole-sample VaR (−1.16%) masks this gap by averaging across regimes.
+* On a $100M position (at 1,450 KRW/USD), the daily 95% loss rises from ≈ ₩1.65B (Stable) to ≈ ₩3.18B (Crisis).
+* Jarque-Bera rejects normality (p ≈ 0); tail risk concentrates in a limited number of high-volatility periods.
+
+### Regime Persistence
+
+* Crisis is highly persistent: P(Crisis → Crisis) = 98.2%, an expected duration of over 56 days.
+* Volatility autocorrelation (ACF) stays outside the 95% confidence band up to ~150 trading days (about six months).
+* Stable and Transition churn between each other, while Crisis, once entered, tends to stay.
+
+### Detection Delay
+
+Regime identification is not instantaneous, and the delay depends on the shock type.
+
+* Acute shocks (e.g., Lehman, COVID): ~0-day detection lag.
+* Gradual shocks (e.g., Fed 75bp hike): up to ~147 days before Crisis is confirmed.
+* Average detection lag: ~40 days.
+
+With a 5-day signal lead, ~40-day average lag, and ~3-day execution time, the effective action window is negative on average. Preemptive hedging is structurally viable for acute shocks but requires pre-committed forwards for gradual ones.
+
+### Global Signals
+
+* VIX lead-lag correlation peaked at +0.536 (lag +5d), but the profile was nearly flat (~0.52) across lags — consistent with co-movement rather than a true lead.
+* USD/CNY showed weak linear correlation (−0.034) but a proxy-selling channel during Asian risk-off episodes.
+* External indicators are best read as real-time monitoring signals, not predictive leads.
 
 ---
 
-## 결론 — 수준은 예측할 수 없으나 상태는 탐지할 수 있다
+## Hedging Framework
 
-환율 리스크가 무엇인지, 위기에 어떻게 대응하는지는 검색만으로도 알 수 있다. 이 분석이 택한 것은
-그 용어를 기업이 즉시 쓸 수 있는 수치로 바꾸는 과정이다. 금융 데이터를 직접 받아 모델을 돌리고,
-통계적 특성을 추출해, 기업별 헤지 전략으로 연결했다.
+Hedge ratios are computed additively rather than from a single fixed value:
 
-환율 수준은 예측할 수 없지만 시장 상태는 탐지할 수 있고, 그것만으로도 헤지 의사결정은 달라진다.
-이것이 수준이 아니라 변동성 상태로 리스크를 정의한 이유다.
-
----
-
-## 레포 구성 · 실행
-
-```
-coremodel_fxrisk.py          코어 라이브러리 (데이터·VaR·HMM·헤지·신호·인과 함수)
-main_research_for_fxrisk.py  실행 스크립트 (분석을 순서대로 호출·출력)
+```text
+Final HR = clip( base(regime) + Δexposure + Δsize + Δskew, 0, 1 )
 ```
 
-```bash
-pip install yfinance hmmlearn statsmodels scikit-learn matplotlib pandas numpy scipy
-python main_research_for_fxrisk.py
+`base` is a policy-fixed value per regime (Stable 30% / Transition 60% / Crisis 90%), adjusted by firm type, firm size, and regime skewness. The hedge budget links daily VaR and regime persistence:
+
+```text
+Daily budget      = λ × VaR_t
+Expected duration = 1 / (1 - P(ii))
+Cumulative cost   = Daily budget × Expected duration
 ```
 
-최초 실행 시 Yahoo Finance에서 USD/KRW(KRW=X)를 받아 CSV로 캐시하고, 이후 실행은 캐시를
-재사용한다. 글로벌 신호(VIX, DXY, USDCNY)도 같은 방식으로 받는다.
+Because Crisis persistence is high, its expected duration — and therefore cumulative hedge cost — is large, which is the quantitative case for preemptive over reactive hedging.
 
-## 데이터 출처
+---
 
-- USD/KRW, VIX, DXY(UUP), USDCNY — Yahoo Finance
-- 외국인 순매수(확장 분석 예정) — KRX 정보데이터시스템
+## Limitations
 
-## 작성자
+This framework is designed for risk monitoring rather than prediction.
+
+* Annualized VaR (daily × √252) assumes i.i.d. normality and underestimates tail loss in a fat-tailed series.
+* HMM is backward-looking and cannot eliminate detection delay.
+* VIX–volatility lead-lag is a level-to-level correlation; common trends inflate it, so the flat profile is read conservatively as co-movement.
+* Regime classifications can shift with model specification and observation window.
+* Hedge ratios are rule-based policy parameters, not statistically optimized estimates.
+
+---
+
+## Repository Structure
+
+```text
+coremodel_fxrisk.py
+    Core analytical library
+
+main_research_for_fxrisk.py
+    End-to-end research pipeline
+
+README.md
+    Project documentation
+```
+
+---
+
+## Technologies
+
+* Python
+* Pandas
+* NumPy
+* SciPy
+* Statsmodels
+* Matplotlib
+* hmmlearn
+
+---
+
+## Project Scope
+
+This project is not a return forecasting model. Its primary objective is to provide a practical framework for monitoring FX risk, identifying market regimes, and supporting hedging decisions under changing market conditions.
+
+## Data
+
+* USD/KRW, VIX, DXY (UUP), USD/CNY — Yahoo Finance (cached to CSV for reproducibility)
+* Foreign investor net flow (planned extension) — KRX Data System
+
+## Author
 
 장효원 (JangHyowon-biz)
